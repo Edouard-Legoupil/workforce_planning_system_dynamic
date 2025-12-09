@@ -1,6 +1,11 @@
 # System Dynamics for Workforce Planning
 
-This notebook demonstrates the system dynamics approach to workforce planning with:
+This notebook demonstrates the system dynamics approach to workforce planning 
+
+You can consult the notebook [here](https://edouard-legoupil.github.io/workforce_planning_system_dynamic/) or listen to an [intro podcast here](https://github.com/Edouard-Legoupil/workforce_planning_system_dynamic/raw/refs/heads/main/Workforce%20Reduction_%20System%20Dynamics%20for%20HR%20Strategy.wav)
+
+
+This accounts for:
 
 
 ## Feedback Loops Modeled:
@@ -43,7 +48,6 @@ This notebook demonstrates the system dynamics approach to workforce planning wi
 
  * Visual Dashboard: Comparative charts showing 5-year outcomes
 
-You can consult the notebook [here](https://edouard-legoupil.github.io/workforce_planning_system_dynamic/) or listen to an [intro podcast here](Workforce Reduction_ System Dynamics for HR Strategy.wav)
 
 
 To Run:
