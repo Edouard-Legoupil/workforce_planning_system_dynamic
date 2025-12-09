@@ -43,6 +43,9 @@ This notebook demonstrates the system dynamics approach to workforce planning wi
 
  * Visual Dashboard: Comparative charts showing 5-year outcomes
 
+You can consult the notebook [here](https://edouard-legoupil.github.io/workforce_planning_system_dynamic/) or listen to an [intro podcast here](Workforce Reduction_ System Dynamics for HR Strategy.wav)
+
+
 To Run:
 
 ```bash
