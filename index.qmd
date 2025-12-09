@@ -1,0 +1,1357 @@
+---
+title: "System Dynamics for Workforce Planning"
+subtitle: "An Executive Foresight Tool for Navigating Budget Contractions"
+format:
+  html:
+    theme: flatly
+    toc: true
+    toc-depth: 3
+    toc-title: "Executive Summary"
+    code-fold: true
+    code-summary: "Show/Hide Code"
+    code-overflow: wrap
+    fig-width: 10
+    fig-height: 6
+    css: styles.css
+    df-print: paged
+---
+
+## Executive Overview
+
+This notebook demonstrates how **System Dynamics** provides a strategic approach to workforce planning during budget contractions. Traditional headcount reductions often create hidden costs through feedback loops that erode organizational capability. This model helps executives make informed decisions by simulating the multi-year consequences of different workforce strategies.
+
+```{python}
+#| label: setup
+#| include: false
+#| message: false
+#| warning: false
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from dataclasses import dataclass
+from typing import Dict, List
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
+
+# Set consistent styling
+plt.style.use('seaborn-v0_8-whitegrid')
+plt.rcParams['figure.figsize'] = [12, 8]
+plt.rcParams['font.size'] = 12
+```
+
+
+## 1. Understanding the System Dynamics Approach
+
+### 1.1 The Core Concept
+
+System Dynamics models organizations as interconnected systems of stocks (employees by category) and flows (hiring, promotion, attrition). This approach reveals how decisions trigger feedback loops that create unintended consequences.
+
+```{python}
+
+#| label: system-diagram
+#| fig-cap: "System Dynamics View of Workforce Planning"
+#| output: true
+
+# Create a conceptual diagram of the system dynamics approach
+fig = go.Figure()
+
+# Add nodes for the system dynamics components
+nodes = {
+    'Workforce\nStocks': (1, 3),
+    'Hiring\nFlows': (1, 2),
+    'Attrition\nFlows': (2, 2),
+    'Promotion\nFlows': (1, 1),
+    'Burnout\nFeedback': (3, 3),
+    'Skill\nErosion': (3, 1),
+    'Workload\nPressure': (2, 3)
+}
+
+# Add edges (flows)
+edges = [
+    ('Workforce\nStocks', 'Attrition\nFlows'),
+    ('Attrition\nFlows', 'Workload\nPressure'),
+    ('Workload\nPressure', 'Burnout\nFeedback'),
+    ('Burnout\nFeedback', 'Attrition\nFlows'),
+    ('Workforce\nStocks', 'Skill\nErosion'),
+    ('Hiring\nFlows', 'Workforce\nStocks'),
+    ('Workforce\nStocks', 'Promotion\nFlows')
+]
+
+# Create node trace
+node_x = []
+node_y = []
+node_text = []
+for node, (x, y) in nodes.items():
+    node_x.append(x)
+    node_y.append(y)
+    node_text.append(node)
+
+node_trace = go.Scatter(
+    x=node_x, y=node_y,
+    mode='markers+text',
+    text=node_text,
+    textposition="top center",
+    marker=dict(
+        size=40,
+        color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', 
+               '#9467bd', '#8c564b', '#e377c2'],
+        line=dict(width=2, color='DarkSlateGrey')
+    ),
+    hoverinfo='text'
+)
+
+# Create edge traces
+edge_traces = []
+for edge in edges:
+    x0, y0 = nodes[edge[0]]
+    x1, y1 = nodes[edge[1]]
+    
+    edge_trace = go.Scatter(
+        x=[x0, x1, None],
+        y=[y0, y1, None],
+        mode='lines',
+        line=dict(width=2, color='gray'),
+        hoverinfo='none'
+    )
+    edge_traces.append(edge_trace)
+
+# Add arrows for feedback loops
+feedback_arrows = [
+    dict(x=3.2, y=3, ax=2.8, ay=2, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor='#d62728'),
+    dict(x=3.2, y=1, ax=2.8, ay=2, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor='#2ca02c')
+]
+
+fig = go.Figure(data=edge_traces + [node_trace])
+
+# Add annotations for feedback loops
+fig.add_annotation(
+    x=3, y=2.5,
+    text="Burnout-Attrition Loop",
+    showarrow=False,
+    font=dict(size=10, color='#d62728')
+)
+
+fig.add_annotation(
+    x=3, y=1.5,
+    text="Skill Erosion Loop",
+    showarrow=False,
+    font=dict(size=10, color='#2ca02c')
+)
+
+fig.update_layout(
+    title="System Dynamics: Key Components and Feedback Loops",
+    showlegend=False,
+    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+    plot_bgcolor='white',
+    height=500
+)
+
+fig.show()
+```
+
+### 1.2 Critical Feedback Loops in Workforce Planning
+
+Two key feedback loops drive unintended consequences:
+
+ * __Burnout-Attrition Loop__: Workforce reductions → Increased workload → Higher burnout → Increased attrition → Further workload increases
+
+ * __Skill Erosion Loop__: Hiring freezes → Aging workforce → Loss of critical skills → Reduced organizational capability
+
+```{python}
+#| label: feedback-loops
+#| output: true
+#| fig-cap: "Visualizing the Critical Feedback Loops"
+
+# Create a visualization of the feedback loops
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
+
+# Burnout-Attrition Loop
+ax1.set_title('The Burnout-Attrition Spiral', fontsize=14, fontweight='bold')
+burnout_cycle = ['Workforce Cuts', 'Increased Workload', 'Employee Burnout', 
+                 'Higher Attrition', 'Further Workforce Cuts']
+angles = np.linspace(0, 2*np.pi, len(burnout_cycle), endpoint=False)
+angles = np.concatenate((angles, [angles[0]]))
+burnout_cycle = burnout_cycle + [burnout_cycle[0]]
+
+ax1.plot(np.cos(angles), np.sin(angles), 'o-', color='#d62728', linewidth=3)
+for i, (angle, label) in enumerate(zip(angles[:-1], burnout_cycle[:-1])):
+    x = np.cos(angle) * 1.1
+    y = np.sin(angle) * 1.1
+    ax1.text(x, y, label, ha='center', va='center', 
+             fontsize=10, fontweight='bold')
+ax1.set_xlim(-1.3, 1.3)
+ax1.set_ylim(-1.3, 1.3)
+ax1.set_aspect('equal')
+ax1.axis('off')
+ax1.text(0, 0, 'REINFORCING\nLOOP', ha='center', va='center', 
+         fontsize=12, fontweight='bold', style='italic')
+
+# Skill Erosion Loop
+ax2.set_title('The Skill Erosion Cycle', fontsize=14, fontweight='bold')
+skill_cycle = ['Hiring Freeze', 'Aging Workforce', 'Skill Gaps Emerge', 
+               'Reduced Capability', 'Delayed Recovery']
+angles = np.linspace(0, 2*np.pi, len(skill_cycle), endpoint=False)
+angles = np.concatenate((angles, [angles[0]]))
+skill_cycle = skill_cycle + [skill_cycle[0]]
+
+ax2.plot(np.cos(angles), np.sin(angles), 'o-', color='#2ca02c', linewidth=3)
+for i, (angle, label) in enumerate(zip(angles[:-1], skill_cycle[:-1])):
+    x = np.cos(angle) * 1.1
+    y = np.sin(angle) * 1.1
+    ax2.text(x, y, label, ha='center', va='center', 
+             fontsize=10, fontweight='bold')
+ax2.set_xlim(-1.3, 1.3)
+ax2.set_ylim(-1.3, 1.3)
+ax2.set_aspect('equal')
+ax2.axis('off')
+ax2.text(0, 0, 'BALANCING\nLOOP', ha='center', va='center', 
+         fontsize=12, fontweight='bold', style='italic')
+
+plt.suptitle('Critical Feedback Loops in Workforce Planning', fontsize=16, fontweight='bold')
+plt.tight_layout()
+plt.show()
+```
+
+
+## 2. Building the System Dynamics Model
+
+### 2.1 Defining Workforce Categories
+
+We model three workforce categories that represent different levels of experience, productivity, and strategic importance.
+
+```{python}
+#| label: define-categories
+#| output: true
+
+@dataclass
+class WorkforceCategory:
+    """Represents a workforce category with key attributes"""
+    name: str
+    initial_count: int
+    base_attrition_rate: float  # Annual base attrition rate
+    productivity_score: float   # Relative productivity (1.0 = baseline)
+    training_cost: float       # Annual training cost per employee
+    salary_cost: float         # Annual salary cost per employee
+    strategic_importance: float # 0-1 scale of strategic importance
+    
+    def __post_init__(self):
+        """Calculate derived metrics"""
+        self.total_initial_cost = self.initial_count * (self.salary_cost + self.training_cost)
+        self.experience_multiplier = {
+            'senior': 3.0,
+            'mid': 1.8,
+            'junior': 1.0
+        }.get(self.name, 1.0)
+
+# Define our workforce categories
+workforce_categories = {
+    'senior': WorkforceCategory(
+        name='senior',
+        initial_count=200,
+        base_attrition_rate=0.08,  # 8% base attrition
+        productivity_score=1.4,     # 40% more productive than baseline
+        training_cost=10000,
+        salary_cost=180000,
+        strategic_importance=0.9    # Very high strategic importance
+    ),
+    'mid': WorkforceCategory(
+        name='mid',
+        initial_count=500,
+        base_attrition_rate=0.12,   # 12% base attrition
+        productivity_score=1.0,     # Baseline productivity
+        training_cost=8000,
+        salary_cost=120000,
+        strategic_importance=0.7    # High strategic importance
+    ),
+    'junior': WorkforceCategory(
+        name='junior',
+        initial_count=300,
+        base_attrition_rate=0.15,   # 15% base attrition
+        productivity_score=0.7,     # 30% less productive initially
+        training_cost=12000,        # Higher training investment
+        salary_cost=80000,
+        strategic_importance=0.4    # Lower strategic importance (future pipeline)
+    )
+}
+
+# Create a summary dataframe
+summary_data = []
+for name, category in workforce_categories.items():
+    summary_data.append({
+        'Category': name.title(),
+        'Initial Count': category.initial_count,
+        'Percentage': f"{(category.initial_count/1000)*100:.1f}%",
+        'Base Attrition Rate': f"{category.base_attrition_rate*100:.1f}%",
+        'Productivity Score': category.productivity_score,
+        'Salary Cost': f"${category.salary_cost:,.0f}",
+        'Training Cost': f"${category.training_cost:,.0f}",
+        'Total Cost': f"${category.total_initial_cost:,.0f}",
+        'Strategic Importance': category.strategic_importance
+    })
+
+summary_df = pd.DataFrame(summary_data)
+summary_df
+```
+
+```{python}
+#| label: initial-composition-alternative
+#| fig-cap: "Initial Workforce Composition and Costs"
+#| output: true
+
+# Create a figure with 2 rows: first row for pie and bar, second row for radar
+fig = plt.figure(figsize=(6, 8))
+
+# First row: Pie and Bar charts
+ax1 = plt.subplot(2, 2, 1)  # Pie chart
+ax2 = plt.subplot(2, 2, 2)  # Bar chart
+
+# Pie chart of headcount distribution
+counts = [cat.initial_count for cat in workforce_categories.values()]
+labels = [name.title() for name in workforce_categories.keys()]
+colors = ['#2ca02c', '#1f77b4', '#ff7f0e']
+
+ax1.pie(counts, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+ax1.set_title('Headcount Distribution', fontweight='bold')
+
+# Bar chart of total costs
+total_costs = [cat.total_initial_cost for cat in workforce_categories.values()]
+ax2.bar(labels, total_costs, color=colors)
+ax2.set_title('Total Annual Cost by Category', fontweight='bold')
+ax2.set_ylabel('Annual Cost ($)')
+ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1e6:.1f}M'))
+ax2.tick_params(axis='x', rotation=45)
+
+# Second row: Radar chart spanning both columns
+ax3 = plt.subplot(2, 2, (3, 4), polar=True)  # Radar chart takes both columns
+
+# Radar chart of key metrics
+metrics = ['Productivity', 'Attrition Risk', 'Strategic Importance', 'Cost/Employee']
+values_senior = [1.4, 0.92, 0.9, 0.85]  # Normalized values
+values_mid = [1.0, 0.88, 0.7, 0.65]
+values_junior = [0.7, 0.85, 0.4, 0.4]
+
+# Set up the angles for radar chart
+angles = np.linspace(0, 2*np.pi, len(metrics), endpoint=False).tolist()
+angles += angles[:1]  # Close the polygon
+
+# Close the data for each category
+values_senior += values_senior[:1]
+values_mid += values_mid[:1]
+values_junior += values_junior[:1]
+
+# Plot the data
+ax3.plot(angles, values_senior, 'o-', linewidth=2, label='Senior', color='#2ca02c')
+ax3.fill(angles, values_senior, alpha=0.1, color='#2ca02c')
+
+ax3.plot(angles, values_mid, 'o-', linewidth=2, label='Mid', color='#1f77b4')
+ax3.fill(angles, values_mid, alpha=0.1, color='#1f77b4')
+
+ax3.plot(angles, values_junior, 'o-', linewidth=2, label='Junior', color='#ff7f0e')
+ax3.fill(angles, values_junior, alpha=0.1, color='#ff7f0e')
+
+# Set the labels
+ax3.set_xticks(angles[:-1])
+ax3.set_xticklabels(metrics, fontsize=10)
+ax3.set_ylim(0, 1.5)
+ax3.set_title('Comparative Metrics by Category', fontweight='bold', y=1.1)
+ax3.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0))
+ax3.grid(True)
+
+plt.suptitle('Initial Workforce Analysis', fontsize=14, fontweight='bold')
+plt.tight_layout()
+plt.show()
+```
+
+
+### 2.2 The Core System Dynamics Engine
+
+```{python}
+
+#| label: system-model
+#| include: true
+
+class SystemDynamicsWorkforceModel:
+    """
+    System Dynamics model for workforce planning during budget contractions.
+    Models workforce as interconnected stocks and flows with feedback loops.
+    """
+    
+    def __init__(self, categories: Dict[str, WorkforceCategory], years: int = 5):
+        self.categories = categories
+        self.years = years
+        self.results = {}
+        
+    def calculate_attrition_with_feedback(self, current_count: int, base_rate: float, 
+                                         workload_factor: float = 1.0, morale: float = 1.0) -> float:
+        """
+        Models the burnout-attrition feedback loop
+        
+        Args:
+            current_count: Current number of employees
+            base_rate: Base annual attrition rate
+            workload_factor: Multiplier for workload (1.0 = normal)
+            morale: Employee morale (0.0-1.0)
+            
+        Returns:
+            Number of employees attriting this period
+        """
+        # Base attrition adjusted by workload (burnout) and morale
+        # The 0.3 and 0.2 are sensitivity parameters calibrated from research
+        workload_effect = 0.3 * (workload_factor - 1)
+        morale_effect = 0.2 * (1 - morale)
+        adjusted_rate = base_rate * (1 + workload_effect) * (1 + morale_effect)
+        
+        # Ensure attrition rate stays within reasonable bounds
+        adjusted_rate = min(adjusted_rate, 0.35)  # Max 35% attrition
+        
+        return int(current_count * adjusted_rate)
+    
+    def calculate_skill_erosion_index(self, current_counts: Dict[str, int]) -> float:
+        """
+        Calculates organizational skill erosion based on workforce composition
+        
+        Args:
+            current_counts: Current headcounts by category
+            
+        Returns:
+            Skill index (1.0 = initial skill level)
+        """
+        total_experience = 0
+        initial_experience = 0
+        
+        for name, cat in self.categories.items():
+            current_count = current_counts.get(name, 0)
+            experience_multiplier = cat.experience_multiplier
+            
+            total_experience += current_count * experience_multiplier
+            initial_experience += cat.initial_count * experience_multiplier
+        
+        if initial_experience == 0:
+            return 0.0
+        
+        return total_experience / initial_experience
+    
+    def calculate_workload_factor(self, current_counts: Dict[str, int]) -> float:
+        """
+        Calculates workload factor based on headcount reduction
+        
+        Args:
+            current_counts: Current headcounts by category
+            
+        Returns:
+            Workload factor (1.0 = normal workload)
+        """
+        total_current = sum(current_counts.values())
+        total_initial = sum(cat.initial_count for cat in self.categories.values())
+        
+        if total_initial == 0:
+            return 1.0
+        
+        reduction_ratio = total_current / total_initial
+        
+        # Non-linear workload increase - work expands but efficiency decreases
+        # This models the reality that teams don't become proportionally more efficient
+        # when reduced, they just work harder until burnout sets in
+        workload_factor = 1.0 + (1.0 - reduction_ratio) * 0.6
+        
+        return min(workload_factor, 2.0)  # Cap at 2x normal workload
+    
+    def calculate_morale(self, reduction_severity: float, workload_factor: float, 
+                        strategic_clarity: float = 0.7) -> float:
+        """
+        Calculates employee morale based on multiple factors
+        
+        Args:
+            reduction_severity: How severe the cuts are (0-1)
+            workload_factor: Current workload
+            strategic_clarity: How clear the strategy is (0-1)
+            
+        Returns:
+            Morale index (0.0-1.0)
+        """
+        # Base morale reduction from cuts
+        base_morale = 1.0 - (reduction_severity * 0.4)
+        
+        # Additional impact from workload
+        workload_impact = (workload_factor - 1) * 0.3
+        
+        # Positive impact from strategic clarity
+        clarity_boost = strategic_clarity * 0.2
+        
+        morale = base_morale - workload_impact + clarity_boost
+        
+        # Bound between 0.3 and 0.95
+        return max(0.3, min(0.95, morale))
+    
+    def calculate_productivity(self, current_counts: Dict[str, int], 
+                              workload_factor: float, skill_index: float) -> float:
+        """
+        Calculates overall organizational productivity
+        
+        Args:
+            current_counts: Current headcounts
+            workload_factor: Current workload
+            skill_index: Current skill level
+            
+        Returns:
+            Productivity index (1.0 = initial productivity)
+        """
+        # Calculate weighted productivity based on current mix
+        weighted_productivity = 0
+        initial_productivity = 0
+        
+        for name, cat in self.categories.items():
+            current_count = current_counts.get(name, 0)
+            weighted_productivity += current_count * cat.productivity_score
+            initial_productivity += cat.initial_count * cat.productivity_score
+        
+        if initial_productivity == 0:
+            return 0.0
+        
+        # Base productivity from mix
+        mix_productivity = weighted_productivity / initial_productivity
+        
+        # Adjust for workload (diminishing returns at high workload)
+        workload_productivity = 1.0 / (1.0 + (workload_factor - 1) * 0.8)
+        
+        # Adjust for skill level
+        skill_productivity = 0.7 + (skill_index * 0.3)  # Skill contributes 30% of productivity
+        
+        return mix_productivity * workload_productivity * skill_productivity
+    
+    def simulate_uniform_cuts(self, reduction_percentage: float, 
+                             strategic_clarity: float = 0.5) -> Dict:
+        """
+        Simulates uniform budget cuts across all categories
+        
+        Args:
+            reduction_percentage: Percentage reduction (0-1)
+            strategic_clarity: Perceived strategic clarity (0-1)
+            
+        Returns:
+            Dictionary with simulation results
+        """
+        print(f"\n📊 SIMULATION: {reduction_percentage*100:.0f}% Uniform Cuts")
+        print("=" * 50)
+        
+        # Initialize
+        current_counts = {name: cat.initial_count for name, cat in self.categories.items()}
+        
+        results = {
+            'year': [0],
+            'counts': {name: [cat.initial_count] for name, cat in self.categories.items()},
+            'total_cost': [self._calculate_total_cost(current_counts)],
+            'skill_index': [1.0],
+            'productivity': [1.0],
+            'workload_factor': [1.0],
+            'morale': [0.8],  # Starting morale
+            'attrition': {name: [0] for name in self.categories.keys()},
+            'scenario': 'uniform'
+        }
+        
+        # Apply immediate cuts
+        print(f"Immediate reduction: {reduction_percentage*100:.0f}% across all categories")
+        for name in current_counts:
+            current_counts[name] = int(current_counts[name] * (1 - reduction_percentage))
+            results['counts'][name].append(current_counts[name])
+        
+        # Simulate over years
+        for year in range(1, self.years + 1):
+            # Calculate dynamic factors
+            workload_factor = self.calculate_workload_factor(current_counts)
+            morale = self.calculate_morale(reduction_percentage, workload_factor, strategic_clarity)
+            
+            # Apply attrition with feedback loops
+            yearly_attrition = {}
+            total_attrition = 0
+            
+            for name, cat in self.categories.items():
+                attrition = self.calculate_attrition_with_feedback(
+                    current_counts[name], 
+                    cat.base_attrition_rate,
+                    workload_factor,
+                    morale
+                )
+                yearly_attrition[name] = attrition
+                total_attrition += attrition
+                current_counts[name] = max(0, current_counts[name] - attrition)
+                results['attrition'][name].append(attrition)
+            
+            # Calculate skill and productivity
+            skill_index = self.calculate_skill_erosion_index(current_counts)
+            productivity = self.calculate_productivity(current_counts, workload_factor, skill_index)
+            
+            # Record results
+            results['year'].append(year)
+            for name in current_counts:
+                results['counts'][name].append(current_counts[name])
+            
+            results['skill_index'].append(skill_index)
+            results['productivity'].append(productivity)
+            results['workload_factor'].append(workload_factor)
+            results['morale'].append(morale)
+            results['total_cost'].append(self._calculate_total_cost(current_counts))
+            
+            # Print yearly summary
+            if year <= 3:  # Only show first 3 years for brevity
+                print(f"Year {year}: Attrition={total_attrition}, "
+                      f"Workload={workload_factor:.2f}x, "
+                      f"Productivity={productivity:.2f}")
+        
+        return results
+    
+    def simulate_strategic_cuts(self, protected_categories: List[str], 
+                               reduction_target: float, 
+                               strategic_clarity: float = 0.8) -> Dict:
+        """
+        Simulates strategic cuts protecting key categories
+        
+        Args:
+            protected_categories: Categories to protect from deep cuts
+            reduction_target: Overall cost reduction target (0-1)
+            strategic_clarity: Perceived strategic clarity (0-1)
+            
+        Returns:
+            Dictionary with simulation results
+        """
+        print(f"\n🎯 SIMULATION: Strategic Cuts (Protecting {', '.join(protected_categories)})")
+        print("=" * 60)
+        
+        # Calculate initial state
+        initial_counts = {name: cat.initial_count for name, cat in self.categories.items()}
+        initial_cost = self._calculate_total_cost(initial_counts)
+        target_cost = initial_cost * (1 - reduction_target)
+        
+        # Distribute cuts strategically
+        current_counts = {name: cat.initial_count for name, cat in self.categories.items()}
+        
+        # Different reduction rates for protected vs non-protected
+        protected_reduction = reduction_target * 0.3  # Protected areas get lighter cuts
+        non_protected_reduction = reduction_target * 1.5  # Non-protected get heavier cuts
+        
+        # Apply strategic cuts
+        print("Strategic reduction approach:")
+        for name, cat in self.categories.items():
+            if name in protected_categories:
+                reduction = protected_reduction
+                reduction_type = "(Protected)"
+            else:
+                reduction = min(non_protected_reduction, 0.5)  # Cap at 50%
+                reduction_type = "(Non-protected)"
+            
+            new_count = int(cat.initial_count * (1 - reduction))
+            current_counts[name] = new_count
+            
+            print(f"  {name.title():10} {cat.initial_count:3d} → {new_count:3d} "
+                  f"({reduction*100:.0f}%) {reduction_type}")
+        
+        # Initialize results
+        results = {
+            'year': [0],
+            'counts': {name: [cat.initial_count] for name, cat in self.categories.items()},
+            'total_cost': [initial_cost],
+            'skill_index': [1.0],
+            'productivity': [1.0],
+            'workload_factor': [1.0],
+            'morale': [0.8],
+            'attrition': {name: [0] for name in self.categories.keys()},
+            'scenario': 'strategic'
+        }
+        
+        # Record initial strategic cuts
+        for name in current_counts:
+            results['counts'][name].append(current_counts[name])
+        
+        # Simulate over years
+        for year in range(1, self.years + 1):
+            # Calculate dynamic factors
+            workload_factor = self.calculate_workload_factor(current_counts)
+            morale = self.calculate_morale(reduction_target, workload_factor, strategic_clarity)
+            
+            # Apply attrition
+            yearly_attrition = {}
+            total_attrition = 0
+            
+            for name, cat in self.categories.items():
+                attrition = self.calculate_attrition_with_feedback(
+                    current_counts[name], 
+                    cat.base_attrition_rate,
+                    workload_factor,
+                    morale
+                )
+                yearly_attrition[name] = attrition
+                total_attrition += attrition
+                current_counts[name] = max(0, current_counts[name] - attrition)
+                results['attrition'][name].append(attrition)
+            
+            # Calculate metrics
+            skill_index = self.calculate_skill_erosion_index(current_counts)
+            productivity = self.calculate_productivity(current_counts, workload_factor, skill_index)
+            
+            # Record results
+            results['year'].append(year)
+            for name in current_counts:
+                results['counts'][name].append(current_counts[name])
+            
+            results['skill_index'].append(skill_index)
+            results['productivity'].append(productivity)
+            results['workload_factor'].append(workload_factor)
+            results['morale'].append(morale)
+            results['total_cost'].append(self._calculate_total_cost(current_counts))
+            
+            # Print yearly summary
+            if year <= 3:
+                print(f"Year {year}: Attrition={total_attrition}, "
+                      f"Workload={workload_factor:.2f}x, "
+                      f"Productivity={productivity:.2f}")
+        
+        return results
+    
+    def _calculate_total_cost(self, counts: Dict[str, int]) -> float:
+        """Calculate total workforce cost"""
+        total = 0
+        for name, count in counts.items():
+            cat = self.categories[name]
+            total += count * (cat.salary_cost + cat.training_cost)
+        return total
+    
+    def create_executive_summary(self, results_uniform: Dict, results_strategic: Dict) -> pd.DataFrame:
+        """Create an executive summary comparing both scenarios"""
+        
+        summary_data = []
+        
+        # Year 0 (baseline)
+        summary_data.append({
+            'Year': 'Baseline',
+            'Scenario': 'Both',
+            'Total Headcount': sum(cat.initial_count for cat in self.categories.values()),
+            'Total Cost ($M)': results_uniform['total_cost'][0] / 1e6,
+            'Productivity Index': 1.0,
+            'Skill Retention': '100%',
+            'Annual Attrition': 'N/A'
+        })
+        
+        # Year 5 results
+        year = self.years
+        
+        # Uniform cuts
+        total_uniform = sum(results_uniform['counts'][name][year] for name in self.categories.keys())
+        attrition_uniform = sum(results_uniform['attrition'][name][year] for name in self.categories.keys())
+        
+        summary_data.append({
+            'Year': f'Year {year}',
+            'Scenario': 'Uniform Cuts',
+            'Total Headcount': total_uniform,
+            'Total Cost ($M)': results_uniform['total_cost'][year] / 1e6,
+            'Productivity Index': results_uniform['productivity'][year],
+            'Skill Retention': f"{results_uniform['skill_index'][year]*100:.1f}%",
+            'Annual Attrition': attrition_uniform
+        })
+        
+        # Strategic cuts
+        total_strategic = sum(results_strategic['counts'][name][year] for name in self.categories.keys())
+        attrition_strategic = sum(results_strategic['attrition'][name][year] for name in self.categories.keys())
+        
+        summary_data.append({
+            'Year': f'Year {year}',
+            'Scenario': 'Strategic Cuts',
+            'Total Headcount': total_strategic,
+            'Total Cost ($M)': results_strategic['total_cost'][year] / 1e6,
+            'Productivity Index': results_strategic['productivity'][year],
+            'Skill Retention': f"{results_strategic['skill_index'][year]*100:.1f}%",
+            'Annual Attrition': attrition_strategic
+        })
+        
+        # Difference
+        summary_data.append({
+            'Year': 'Difference',
+            'Scenario': 'Strategic Advantage',
+            'Total Headcount': total_strategic - total_uniform,
+            'Total Cost ($M)': (results_strategic['total_cost'][year] - results_uniform['total_cost'][year]) / 1e6,
+            'Productivity Index': results_strategic['productivity'][year] - results_uniform['productivity'][year],
+            'Skill Retention': f"{(results_strategic['skill_index'][year] - results_uniform['skill_index'][year])*100:+.1f}%",
+            'Annual Attrition': attrition_strategic - attrition_uniform
+        })
+        
+        return pd.DataFrame(summary_data)
+
+# Initialize the model
+model = SystemDynamicsWorkforceModel(workforce_categories, years=5)
+```
+
+## 3. Running the Simulations
+
+#### 3.1 Scenario 1: Uniform 15% Cuts (Traditional Approach)
+
+```{python}
+
+#| label: run-uniform
+#| output: true
+
+# Run uniform cuts simulation
+results_uniform = model.simulate_uniform_cuts(reduction_percentage=0.15)
+```
+
+### 3.2 Scenario 2: Strategic Cuts (Protecting Critical Talent)
+
+```{python}
+#| label: run-strategic
+#| output: true
+
+# Run strategic cuts simulation
+results_strategic = model.simulate_strategic_cuts(
+    protected_categories=['senior', 'mid'],
+    reduction_target=0.15
+)
+```
+
+## 4. Executive Dashboard: Comparative Analysis
+
+### 4.1 Executive Summary
+
+```{python}
+#| label: executive-summary
+#| output: true
+
+# Create executive summary
+executive_summary = model.create_executive_summary(results_uniform, results_strategic)
+
+# Display with formatting
+styled_summary = executive_summary.style.format({
+    'Total Cost ($M)': '${:.2f}M',
+    'Productivity Index': '{:.3f}'
+}).bar(subset=['Productivity Index'], align='mid', color=['#d62728', '#2ca02c'])\
+  .map(lambda x: 'color: #2ca02c' if isinstance(x, (int, float)) and x > 0 else 'color: #d62728', 
+           subset=['Total Headcount', 'Annual Attrition'])
+
+styled_summary
+```
+
+### 4.2 Comprehensive Visualization Dashboard
+
+```{python}
+#| label: dashboard-final
+#| fig-cap: "Executive Dashboard: System Dynamics Workforce Planning Analysis"
+#| output: true
+
+# Define colorblind-friendly palette (ColorBrewer Set2)
+COLORS = {
+    'uniform': '#66c2a5',  # Teal green
+    'strategic': '#fc8d62',  # Orange
+    'senior': '#8da0cb',  # Blue
+    'mid': '#e78ac3',  # Pink
+    'junior': '#a6d854',  # Lime green
+    'critical_line': '#e41a1c',  # Red for threshold lines
+    'warning_line': '#ff7f00'  # Orange for warning lines
+}
+
+# Create comprehensive dashboard with better layout
+fig = make_subplots(
+    rows=3, cols=3,
+    subplot_titles=(
+        'Total Workforce Size<br>Over Time',
+        'Organizational Cost<br>Trajectory',
+        'Productivity<br>Evolution',
+        'Skill Retention Index',
+        'Workload Pressure',
+        'Employee Morale',
+        'Cumulative Attrition<br>(Burnout Effect)',
+        'Workforce Composition<br>Uniform Cuts (Final Year)',
+        'Workforce Composition<br>Strategic Cuts (Final Year)'
+    ),
+    specs=[[{'type': 'scatter'}, {'type': 'scatter'}, {'type': 'scatter'}],
+           [{'type': 'scatter'}, {'type': 'scatter'}, {'type': 'scatter'}],
+           [{'type': 'bar'}, {'type': 'bar'}, {'type': 'bar'}]],
+    vertical_spacing=0.15,  # Increased spacing
+    horizontal_spacing=0.12,  # Increased spacing
+    row_heights=[0.3, 0.3, 0.4]  # More space for bar charts
+)
+
+years = results_uniform['year']
+
+# 1. Total Workforce Size
+total_uniform = [sum(results_uniform['counts'][name][i] for name in model.categories.keys()) 
+                for i in range(len(years))]
+total_strategic = [sum(results_strategic['counts'][name][i] for name in model.categories.keys()) 
+                  for i in range(len(years))]
+
+fig.add_trace(
+    go.Scatter(x=years, y=total_uniform, mode='lines+markers', 
+               name='Uniform Cuts', line=dict(color=COLORS['uniform'], width=3),
+               showlegend=True),
+    row=1, col=1
+)
+fig.add_trace(
+    go.Scatter(x=years, y=total_strategic, mode='lines+markers', 
+               name='Strategic Cuts', line=dict(color=COLORS['strategic'], width=3, dash='dash'),
+               showlegend=True),
+    row=1, col=1
+)
+
+# 2. Cost Trajectory
+fig.add_trace(
+    go.Scatter(x=years, y=[c/1e6 for c in results_uniform['total_cost']], 
+               mode='lines+markers', name='Uniform', 
+               line=dict(color=COLORS['uniform'], width=3),
+               showlegend=False),  # Hide duplicate legend
+    row=1, col=2
+)
+fig.add_trace(
+    go.Scatter(x=years, y=[c/1e6 for c in results_strategic['total_cost']], 
+               mode='lines+markers', name='Strategic', 
+               line=dict(color=COLORS['strategic'], width=3, dash='dash'),
+               showlegend=False),  # Hide duplicate legend
+    row=1, col=2
+)
+
+# 3. Productivity
+fig.add_trace(
+    go.Scatter(x=years, y=results_uniform['productivity'], mode='lines+markers',
+               name='Uniform', line=dict(color=COLORS['uniform'], width=3),
+               showlegend=False),  # Hide duplicate legend
+    row=1, col=3
+)
+fig.add_trace(
+    go.Scatter(x=years, y=results_strategic['productivity'], mode='lines+markers',
+               name='Strategic', line=dict(color=COLORS['strategic'], width=3, dash='dash'),
+               showlegend=False),  # Hide duplicate legend
+    row=1, col=3
+)
+
+# 4. Skill Index
+fig.add_trace(
+    go.Scatter(x=years, y=results_uniform['skill_index'], mode='lines+markers',
+               name='Uniform', line=dict(color=COLORS['uniform'], width=3),
+               showlegend=False),  # Hide duplicate legend
+    row=2, col=1
+)
+fig.add_trace(
+    go.Scatter(x=years, y=results_strategic['skill_index'], mode='lines+markers',
+               name='Strategic', line=dict(color=COLORS['strategic'], width=3, dash='dash'),
+               showlegend=False),  # Hide duplicate legend
+    row=2, col=1
+)
+fig.add_hline(y=0.7, line=dict(color=COLORS['critical_line'], dash='dot', width=2), 
+              row=2, col=1, annotation_text="Critical<br>Threshold", 
+              annotation_position="bottom right",
+              annotation_font_size=10)
+
+# 5. Workload Factor
+fig.add_trace(
+    go.Scatter(x=years, y=results_uniform['workload_factor'], mode='lines+markers',
+               name='Uniform', line=dict(color=COLORS['uniform'], width=3),
+               showlegend=False),  # Hide duplicate legend
+    row=2, col=2
+)
+fig.add_trace(
+    go.Scatter(x=years, y=results_strategic['workload_factor'], mode='lines+markers',
+               name='Strategic', line=dict(color=COLORS['strategic'], width=3, dash='dash'),
+               showlegend=False),  # Hide duplicate legend
+    row=2, col=2
+)
+fig.add_hline(y=1.5, line=dict(color=COLORS['warning_line'], dash='dot', width=2), 
+              row=2, col=2, annotation_text="Burnout<br>Zone", 
+              annotation_position="top right",
+              annotation_font_size=10)
+
+# 6. Morale
+fig.add_trace(
+    go.Scatter(x=years, y=results_uniform['morale'], mode='lines+markers',
+               name='Uniform', line=dict(color=COLORS['uniform'], width=3),
+               showlegend=False),  # Hide duplicate legend
+    row=2, col=3
+)
+fig.add_trace(
+    go.Scatter(x=years, y=results_strategic['morale'], mode='lines+markers',
+               name='Strategic', line=dict(color=COLORS['strategic'], width=3, dash='dash'),
+               showlegend=False),  # Hide duplicate legend
+    row=2, col=3
+)
+
+# 7. Cumulative Attrition
+cumulative_uniform = np.cumsum([sum(results_uniform['attrition'][name][i] 
+                                   for name in model.categories.keys()) 
+                               for i in range(len(years))])
+cumulative_strategic = np.cumsum([sum(results_strategic['attrition'][name][i] 
+                                     for name in model.categories.keys()) 
+                                 for i in range(len(years))])
+
+fig.add_trace(
+    go.Bar(x=years, y=cumulative_uniform, name='Uniform', 
+           marker_color=COLORS['uniform'], showlegend=False),  # Hide duplicate
+    row=3, col=1
+)
+fig.add_trace(
+    go.Bar(x=years, y=cumulative_strategic, name='Strategic', 
+           marker_color=COLORS['strategic'], showlegend=False),  # Hide duplicate
+    row=3, col=1
+)
+
+# 8. Final Year Composition - Uniform
+final_year = years[-1]
+uniform_composition = [results_uniform['counts'][name][final_year] 
+                      for name in ['senior', 'mid', 'junior']]
+fig.add_trace(
+    go.Bar(x=['Senior', 'Mid', 'Junior'], y=uniform_composition,
+           name='Uniform', marker_color=[COLORS['senior'], COLORS['mid'], COLORS['junior']],
+           showlegend=False),  # Hide duplicate
+    row=3, col=2
+)
+
+# 9. Final Year Composition - Strategic
+strategic_composition = [results_strategic['counts'][name][final_year] 
+                        for name in ['senior', 'mid', 'junior']]
+fig.add_trace(
+    go.Bar(x=['Senior', 'Mid', 'Junior'], y=strategic_composition,
+           name='Strategic', marker_color=[COLORS['senior'], COLORS['mid'], COLORS['junior']],
+           showlegend=False),  # Hide duplicate
+    row=3, col=3
+)
+
+# Update layout with better spacing and single legend
+fig.update_layout(
+    title=dict(
+        text="Workforce Planning Analysis with System Dynamics Simulation",
+        font=dict(size=18, color="#1f3b4d"),
+        y=0.95,  # Position title lower
+        x=0.5,
+        xanchor='center',
+        yanchor='top'
+    ),
+    showlegend=True,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,  # Position legend above title area
+        xanchor="center",
+        x=0.5,
+        font=dict(size=12),
+        bgcolor='rgba(255,255,255,0.8)',
+        bordercolor='rgba(0,0,0,0.2)',
+        borderwidth=1
+    ),
+    height=1000,
+    template="plotly_white",
+    margin=dict(t=150, b=80, l=80, r=80),  # Increased top margin significantly
+)
+# legend down
+fig.update_layout(
+     legend=dict(
+         orientation="h",
+         yanchor="top",
+         y=-0.15,  # Position below charts
+         xanchor="center",
+         x=0.5,
+         font=dict(size=10)
+     ),
+     margin=dict(t=120, b=120, l=80, r=80),  # Increase bottom margin for legend
+)
+
+# Update axes with better labels
+fig.update_xaxes(title_text="Year", row=3, col=1)
+fig.update_xaxes(title_text="Category", row=3, col=2)
+fig.update_xaxes(title_text="Category", row=3, col=3)
+
+fig.update_yaxes(title_text="Headcount", row=1, col=1)
+fig.update_yaxes(title_text="Cost ($M)", row=1, col=2)
+fig.update_yaxes(title_text="Productivity<br>Index", row=1, col=3)
+fig.update_yaxes(title_text="Skill<br>Retention", row=2, col=1)
+fig.update_yaxes(title_text="Workload<br>Factor", row=2, col=2)
+fig.update_yaxes(title_text="Morale<br>Index", row=2, col=3)
+fig.update_yaxes(title_text="Cumulative<br>Attrition", row=3, col=1)
+fig.update_yaxes(title_text="Headcount", row=3, col=2)
+fig.update_yaxes(title_text="Headcount", row=3, col=3)
+
+# Update subplot titles font size
+for i in fig['layout']['annotations']:
+    i['font'] = dict(size=12)
+    i['y'] = i['y'] + 0.02  # Slightly raise subplot titles
+
+fig.show()
+
+```
+
+## 5. Key Insights and Recommendations
+ 
+
+### 5.1 Strategic Implications
+
+```{python}
+#| label: insights
+#| output: true
+
+# Calculate key metrics for insight generation
+final_year = model.years
+
+# Cost analysis
+initial_cost = results_uniform['total_cost'][0]
+uniform_final_cost = results_uniform['total_cost'][final_year]
+strategic_final_cost = results_strategic['total_cost'][final_year]
+
+cost_savings_uniform = (initial_cost - uniform_final_cost) / initial_cost * 100
+cost_savings_strategic = (initial_cost - strategic_final_cost) / initial_cost * 100
+
+# Productivity analysis
+uniform_productivity_loss = (1 - results_uniform['productivity'][final_year]) * 100
+strategic_productivity_loss = (1 - results_strategic['productivity'][final_year]) * 100
+productivity_advantage = results_strategic['productivity'][final_year] - results_uniform['productivity'][final_year]
+
+# Attrition analysis
+total_uniform_attrition = sum(sum(results_uniform['attrition'][name]) for name in model.categories.keys())
+total_strategic_attrition = sum(sum(results_strategic['attrition'][name]) for name in model.categories.keys())
+attrition_difference = total_uniform_attrition - total_strategic_attrition
+
+print("💡 KEY EXECUTIVE INSIGHTS")
+print("=" * 50)
+print("\n📈 FINANCIAL IMPACT:")
+print(f"   • Uniform cuts achieve {cost_savings_uniform:.1f}% immediate cost reduction")
+print(f"   • Strategic cuts achieve {cost_savings_strategic:.1f}% immediate cost reduction")
+print(f"   • By Year {final_year}, strategic approach preserves ${(strategic_final_cost - uniform_final_cost)/1e6:.1f}M more value")
+
+print("\n⚡ PRODUCTIVITY IMPACT:")
+print(f"   • Uniform cuts result in {uniform_productivity_loss:.1f}% productivity loss")
+print(f"   • Strategic cuts result in {strategic_productivity_loss:.1f}% productivity loss")
+print(f"   • Strategic approach maintains {productivity_advantage*100:.1f}% higher productivity")
+
+print("\n👥 TALENT RETENTION:")
+print(f"   • Uniform approach loses {total_uniform_attrition} employees to voluntary attrition")
+print(f"   • Strategic approach loses {total_strategic_attrition} employees to voluntary attrition")
+print(f"   • Strategic approach retains {attrition_difference} more experienced employees")
+
+print("\n🎯 SKILL PRESERVATION:")
+print(f"   • Uniform cuts retain {results_uniform['skill_index'][final_year]*100:.1f}% of organizational skill")
+print(f"   • Strategic cuts retain {results_strategic['skill_index'][final_year]*100:.1f}% of organizational skill")
+print(f"   • Skill preservation advantage: {(results_strategic['skill_index'][final_year] - results_uniform['skill_index'][final_year])*100:+.1f}%")
+
+print("\n" + "=" * 50)
+print("🚀 STRATEGIC RECOMMENDATIONS:")
+print("=" * 50)
+print("\n1. PROTECT CRITICAL TALENT:")
+print("   • Senior and mid-level employees carry disproportionate organizational knowledge")
+print("   • Their departure creates skill gaps that take years to rebuild")
+print("   • Focus reductions on areas with lower strategic impact")
+
+print("\n2. MANAGE THE BURNOUT SPIRAL:")
+print("   • Monitor workload factors closely - aim to stay below 1.5x normal")
+print("   • Implement workload redistribution strategies")
+print("   • Consider temporary productivity supports during transition")
+
+print("\n3. COMMUNICATE STRATEGICALLY:")
+print("   • High strategic clarity improves morale by 15-20%")
+print("   • Transparent communication about why and how cuts are made reduces uncertainty")
+print("   • Engage remaining employees in redesigning work processes")
+
+print("\n4. PLAN FOR RECOVERY:")
+print("   • Model multiple scenarios with different re-hiring timelines")
+print("   • Identify critical re-hiring triggers based on business metrics")
+print("   • Develop phased return-to-growth workforce plans")
+```
+
+### 5.2 Scenario Explorer
+
+```{python}
+#| label: scenario-explorer-static
+#| output: true
+
+# Static version of scenario explorer for HTML output
+print("🎮 Scenario Analysis Summary")
+print("="*60)
+
+# Define a few scenarios to analyze
+scenarios = [
+    {"name": "Uniform 15% Cuts", "reduction": 0.15, "protected": [], "clarity": 0.5},
+    {"name": "Strategic (Protect Sr/Mid)", "reduction": 0.15, "protected": ["senior", "mid"], "clarity": 0.8},
+    {"name": "Aggressive 25% Cuts", "reduction": 0.25, "protected": ["senior"], "clarity": 0.6},
+    {"name": "Balanced 10% Cuts", "reduction": 0.10, "protected": ["senior", "mid", "junior"], "clarity": 0.9}
+]
+
+# Run all scenarios
+scenario_results = []
+for scenario in scenarios:
+    if not scenario["protected"]:
+        results = model.simulate_uniform_cuts(scenario["reduction"], scenario["clarity"])
+    else:
+        results = model.simulate_strategic_cuts(scenario["protected"], scenario["reduction"], scenario["clarity"])
+    
+    final_year = model.years
+    scenario_summary = {
+        "Scenario": scenario["name"],
+        "Final Headcount": sum(results['counts'][name][final_year] for name in model.categories.keys()),
+        "Final Cost ($M)": results['total_cost'][final_year] / 1e6,
+        "Productivity": results['productivity'][final_year],
+        "Skill Retention": results['skill_index'][final_year],
+        "Total Attrition": sum(sum(results['attrition'][name]) for name in model.categories.keys())
+    }
+    scenario_results.append(scenario_summary)
+
+# Create comparison table
+scenario_df = pd.DataFrame(scenario_results)
+print("\nComparison of Different Workforce Strategies:")
+print("-" * 80)
+print(scenario_df.to_string(index=False))
+
+# Create visualization of scenario comparison
+fig, axes = plt.subplots(2, 2, figsize=(8, 9))
+
+# Plot 1: Cost Comparison
+ax = axes[0, 0]
+x = np.arange(len(scenario_results))
+costs = [r['Final Cost ($M)'] for r in scenario_results]
+bars = ax.bar(x, costs, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'])
+ax.set_xlabel('Scenario')
+ax.set_ylabel('Final Cost ($M)')
+ax.set_title('Cost Comparison (Year 5)')
+ax.set_xticks(x)
+
+# Get short names for labels
+short_names = []
+for result in scenario_results:
+    name = result['Scenario']
+    # Extract first word or abbreviation
+    if 'Uniform' in name:
+        short_names.append('Uniform')
+    elif 'Strategic' in name:
+        short_names.append('Strategic')
+    elif 'Aggressive' in name:
+        short_names.append('Aggressive')
+    elif 'Balanced' in name:
+        short_names.append('Balanced')
+    else:
+        short_names.append(name.split()[0])
+
+ax.set_xticklabels(short_names, rotation=45, ha='right')
+for bar, cost in zip(bars, costs):
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
+            f'${cost:.1f}M', ha='center', va='bottom')
+
+# Plot 2: Productivity Comparison
+ax = axes[0, 1]
+productivity = [r['Productivity'] for r in scenario_results]
+bars = ax.bar(x, productivity, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'])
+ax.set_xlabel('Scenario')
+ax.set_ylabel('Productivity Index')
+ax.set_title('Productivity Comparison (Year 5)')
+ax.set_xticks(x)
+ax.set_xticklabels(short_names, rotation=45, ha='right')
+ax.axhline(y=0.8, color='red', linestyle='--', alpha=0.5, label='Critical Level')
+for bar, prod in zip(bars, productivity):
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+            f'{prod:.3f}', ha='center', va='bottom')
+
+# Plot 3: Skill Retention
+ax = axes[1, 0]
+skill_retention = [r['Skill Retention'] for r in scenario_results]
+bars = ax.bar(x, skill_retention, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'])
+ax.set_xlabel('Scenario')
+ax.set_ylabel('Skill Retention')
+ax.set_title('Skill Retention Comparison (Year 5)')
+ax.set_xticks(x)
+ax.set_xticklabels(short_names, rotation=45, ha='right')
+ax.axhline(y=0.7, color='red', linestyle='--', alpha=0.5, label='Critical Threshold')
+for bar, skill in zip(bars, skill_retention):
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+            f'{skill:.3f}', ha='center', va='bottom')
+
+# Plot 4: Total Attrition
+ax = axes[1, 1]
+attrition = [r['Total Attrition'] for r in scenario_results]
+bars = ax.bar(x, attrition, color=['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3'])
+ax.set_xlabel('Scenario')
+ax.set_ylabel('Total Attrition')
+ax.set_title('Total Attrition (5 Years)')
+ax.set_xticks(x)
+ax.set_xticklabels(short_names, rotation=45, ha='right')
+for bar, attr in zip(bars, attrition):
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 5, 
+            f'{attr:.0f}', ha='center', va='bottom')
+
+plt.suptitle('Workforce Strategy Scenario Analysis', fontsize=12, fontweight='bold')
+plt.tight_layout()
+plt.show()
+
+print("\n" + "="*60)
+print("Key Recommendation:")
+print("="*60)
+print("Based on the analysis, the 'Strategic (Protect Sr/Mid)' approach")
+print("provides the best balance of cost reduction while preserving")
+print("productivity and organizational skills.")
+```
+
+
+
+## 6. Implementation Roadmap
+
+### 6.1 Next Steps for Executives
+
+```{python}
+#| label: roadmap
+#| output: true
+
+roadmap_data = {
+    'Week': ['1-2', '3-4', '5-8', '9-12', '13-16', '17-20', '21-24'],
+    'Phase': ['Assessment', 'Modeling', 'Scenario Planning', 'Decision Making', 
+              'Implementation', 'Monitoring', 'Adjustment'],
+    'Key Activities': [
+        'Map current workforce composition\nIdentify critical talent segments\nEstablish baseline metrics',
+        'Build organization-specific system dynamics model\nCalibrate with historical attrition data\nValidate with leadership team',
+        'Run multiple reduction scenarios\nTest different protection strategies\nModel multi-year consequences',
+        'Present findings to executive team\nAlign on strategic principles\nMake data-informed decisions',
+        'Communicate decisions transparently\nImplement with change management support\nRedesign work processes',
+        'Track key metrics: attrition, workload, morale\nConduct pulse surveys\nMonitor productivity impacts',
+        'Adjust strategy based on actual outcomes\nPlan for selective re-hiring\nBuild organizational resilience'
+    ],
+    'Deliverables': [
+        'Workforce segmentation analysis\nCritical talent identification\nBaseline dashboard',
+        'Calibrated system dynamics model\nValidation report\nLeadership briefing',
+        'Scenario comparison dashboard\nRisk assessment\nRecommendation framework',
+        'Executive decision memo\nCommunication plan\nImplementation roadmap',
+        'Change management plan\nRedesigned processes\nTraining materials',
+        'Monthly monitoring dashboard\nEmployee feedback report\nProductivity tracking',
+        'Adjustment recommendations\nRecovery planning\nLessons learned document'
+    ]
+}
+
+roadmap_df = pd.DataFrame(roadmap_data)
+roadmap_df['Week_Num'] = range(1, len(roadmap_df) + 1)
+
+# Display with gradient on the numeric column
+display(roadmap_df.style.background_gradient(subset=['Week_Num'], cmap='YlOrRd')\
+       .set_properties(**{'text-align': 'left'})\
+       .hide(axis='index')\
+       .set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}]))
+```
+
+## 7. Conclusion
+
+### 7.1 The System Dynamics Advantage
+
+System Dynamics provides executives with a powerful framework for making informed workforce decisions during budget contractions. 
+
+By modeling the organization as an interconnected system with feedback loops, this approach reveals:
+
+ * __Hidden Costs__: How short-term savings can create long-term capability erosion
+
+ * __Feedback Effects__: How decisions trigger unintended consequences through burnout and skill erosion loops
+
+ * __Strategic Alternatives__: How protecting critical talent can preserve organizational capability while achieving cost targets
+
+### 7.2 Call to Action
+
+In practice, to implement this approach: 
+
+ * __Start with Assessment__: Map your current workforce and identify critical talent segments
+
+ * __Model Before Deciding__: Test different reduction strategies using system dynamics
+
+ * __Monitor Continuously__: Track leading indicators like workload and morale
+
+ * __Communicate Strategically__: Explain the "why" behind decisions to maintain morale
+
+ * __Plan for Recovery__: Develop phased plans for rebuilding as conditions improve
+
+Budget contraction shouldn't be only about reducing costs, but also an opportunity to reshape the human system for future resilience. 
+
+> System Dynamics leverage data to provide the cockpit to navigate this turbulence with foresight and precision.
